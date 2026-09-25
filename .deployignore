@@ -1,0 +1,7 @@
+# Exclusions propres au plugin calendrierbe, ajoutées à celles de
+# deploy-plugin.sh. Un motif rsync par ligne ; les lignes vides et celles
+# commençant par # sont ignorées par --exclude-from.
+
+# Le jeu d'essai et les contrôles par réflexion n'existent que pour le
+# développement : ils n'ont rien à faire dans la racine web.
+tests/

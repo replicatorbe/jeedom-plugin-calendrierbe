@@ -1,0 +1,34 @@
+{
+    "id": "calendrierbe",
+    "name": "Calendrier des programmations",
+    "description": {
+        "fr_FR": "Un calendrier de tout ce que Jeedom va exécuter : scénarios programmés, blocs A et DANS en attente, retours d'état et alertes différées des commandes, tâches des plugins et du coeur, fonctions cron de chaque plugin, et prochaines échéances annoncées par les plugins. Vue mois, semaine ou jour ; un clic sur une journée détaille chaque déclenchement, heure par heure, avec un lien vers le scénario ou l'équipement concerné. Les tâches très fréquentes sont résumées en une ligne au lieu de noyer la journée. Rien n'est modifié : le plugin lit ce que le coeur a programmé et le calcule comme lui.",
+        "en_US": "A calendar of everything Jeedom is going to run: scheduled scenarios, pending AT and IN blocks, delayed state returns and alerts of commands, plugin and core tasks, each plugin's cron functions, and the next due dates announced by plugins. Month, week or day view; a click on a day details every trigger, hour by hour, with a link to the scenario or device concerned. Very frequent tasks are summed up in one line instead of flooding the day. Nothing is changed: the plugin reads what the core has scheduled and computes it the way the core does."
+    },
+    "licence": "AGPL",
+    "author": "sMug (Jérôme Fafchamps)",
+    "require": "4.4",
+    "requireOsVersion": "11",
+    "category": "organization",
+    "index": "calendrierbe",
+    "display": "calendrierbe",
+    "hasDependency": 0,
+    "hasOwnDeamon": 0,
+    "maxDependancyInstallTime": 5,
+    "eventjs": 0,
+    "issue": "https://github.com/replicatorbe/jeedom-plugin-calendrierbe/issues",
+    "documentation": "https://github.com/replicatorbe/jeedom-plugin-calendrierbe/blob/master/docs/#language#/index.md",
+    "documentation_beta": "https://github.com/replicatorbe/jeedom-plugin-calendrierbe/blob/beta/docs/#language#/index.md",
+    "changelog": "https://github.com/replicatorbe/jeedom-plugin-calendrierbe/blob/master/docs/#language#/changelog.md",
+    "changelog_beta": "https://github.com/replicatorbe/jeedom-plugin-calendrierbe/blob/beta/docs/#language#/changelog.md",
+    "language": [
+        "fr_FR",
+        "en_US"
+    ],
+    "compatibility": [
+        "smart",
+        "rpi",
+        "docker",
+        "diy"
+    ]
+}
