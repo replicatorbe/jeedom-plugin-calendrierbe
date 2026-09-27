@@ -90,6 +90,11 @@ class calendrierbeCollecte {
     private $_tasks = array();
     private $_warnings = array();
     private $_plugins = null;
+    private $_disabledFunctions = null;
+    private $_eqLogics = array();
+    private $_cmds = array();
+    private $_scenarios = null;
+    private $_objects = null;
     private $_hookPlugins = array();
     private $_cronOff = false;
     private $_scenarioOff = '';
@@ -179,9 +184,21 @@ class calendrierbeCollecte {
      * tant que la journée en compte peu, une ligne résumée sinon.
      */
     private function addOccurrences($_timestamps, $_base, $_frequency = '') {
+        /* Une tâche à la minute compte soixante mille exécutions sur six
+         * semaines : un date() pour chacune coûtait plus que tout le reste de
+         * la collecte. On ne date que la première de chaque jour, et les
+         * suivantes y restent tant qu'elles n'atteignent pas le minuit suivant. */
         $byDay = array();
+        $day = null;
+        $dayStart = 0;
+        $dayEnd = 0;
         foreach ($_timestamps as $ts) {
-            $byDay[date('Y-m-d', $ts)][] = $ts;
+            if ($day === null || $ts < $dayStart || $ts >= $dayEnd) {
+                $day = date('Y-m-d', $ts);
+                $dayStart = strtotime($day);
+                $dayEnd = strtotime($day . ' +1 day');
+            }
+            $byDay[$day][] = $ts;
         }
         /* Le choix se fait pour la tâche, pas pour la journée : le soir, il
          * ne reste que quelques passages d'une tâche « toutes les 10 min »,
@@ -193,19 +210,21 @@ class calendrierbeCollecte {
         }
         foreach ($byDay as $list) {
             if ($summarize && count($list) > 1) {
+                /* La liste n'a d'intérêt que tant qu'elle se lit : « chaque
+                 * heure » oui, « toutes les 5 min » non. Au-delà, elle ne
+                 * ferait qu'alourdir la réponse — les tâches à la minute la
+                 * multiplieraient par centaines de kilo-octets. */
                 $times = array();
-                foreach ($list as $ts) {
-                    $times[] = date('H:i', $ts);
+                if (count($list) <= 48) {
+                    foreach ($list as $ts) {
+                        $times[] = date('H:i', $ts);
+                    }
                 }
                 $this->push($list[0], $_base + array(
                     'count'     => count($list),
                     'last'      => date('H:i', end($list)),
                     'frequency' => $_frequency,
-                    /* La liste n'a d'intérêt que tant qu'elle se lit : « chaque
-                     * heure » oui, « toutes les 5 min » non. Au-delà, elle ne
-                     * ferait qu'alourdir la réponse — les tâches à la minute la
-                     * multiplieraient par centaines de kilo-octets. */
-                    'times'     => (count($times) <= 48) ? $times : array(),
+                    'times'     => $times,
                 ));
             } else {
                 foreach ($list as $ts) {
@@ -264,10 +283,142 @@ class calendrierbeCollecte {
         return $this->_plugins;
     }
 
+    /* La case « fonction cron » décochée dans la gestion d'un plugin
+     * (functionality::<fn>::enable), lue en une requête pour tous les plugins
+     * plutôt qu'une par plugin et par fonction. Comme config::byKey(), une
+     * valeur absente ou vide vaut le défaut : activée. */
+    private function functionEnabled($_plugin, $_function) {
+        if ($this->_disabledFunctions === null) {
+            $this->_disabledFunctions = array();
+            $rows = DB::Prepare("SELECT plugin, `key`, `value` FROM config WHERE `key` LIKE 'functionality::%::enable'", array(), DB::FETCH_TYPE_ALL);
+            foreach (is_array($rows) ? $rows : array() as $row) {
+                if ($row['value'] !== '' && $row['value'] !== null && $row['value'] == 0) {
+                    $this->_disabledFunctions[$row['plugin'] . '::' . $row['key']] = true;
+                }
+            }
+        }
+        return !isset($this->_disabledFunctions[$_plugin . '::functionality::' . $_function . '::enable']);
+    }
+
+    /* ============================================ CHARGEMENTS GROUPÉS */
+
+    /*
+     * Chaque byId() est une requête, et getHumanName() en ajoute une pour
+     * l'objet parent : une installation avec cent commandes « next… » en
+     * faisait trois cents. On charge donc par lots, une requête par table, et
+     * on garde ce qui a été lu pour les sources suivantes.
+     */
+
+    /* Les objets (pièces), tous d'un coup : il y en a peu, et presque chaque
+     * équipement en demande un pour son nom. */
+    private function objects() {
+        if ($this->_objects === null) {
+            $this->_objects = array();
+            foreach (jeeObject::all() as $object) {
+                $this->_objects[$object->getId()] = $object;
+            }
+        }
+        return $this->_objects;
+    }
+
+    private static function idList($_ids) {
+        $ids = array();
+        foreach ($_ids as $id) {
+            if (is_numeric($id)) {
+                $ids[(int) $id] = (int) $id;
+            }
+        }
+        return $ids;
+    }
+
+    /* Charge en une requête les équipements pas encore lus, avec la classe
+     * de leur plugin et leur objet, comme eqLogic::byId() les rendrait. */
+    private function loadEqLogics($_ids) {
+        $ids = array_diff_key(self::idList($_ids), $this->_eqLogics);
+        if (empty($ids)) {
+            return;
+        }
+        $rows = DB::Prepare('SELECT ' . DB::buildField('eqLogic') . ' FROM eqLogic WHERE id IN (' . implode(',', $ids) . ')',
+                            array(), DB::FETCH_TYPE_ALL, PDO::FETCH_CLASS, 'eqLogic');
+        $objects = $this->objects();
+        foreach (is_array($rows) ? $rows : array() as $eqLogic) {
+            $type = $eqLogic->getEqType_name();
+            if (class_exists($type)) {
+                $eqLogic = cast($eqLogic, $type);
+                if (method_exists($eqLogic, 'decrypt')) {
+                    $eqLogic->decrypt();
+                }
+            }
+            $objectId = $eqLogic->getObject_id();
+            $eqLogic->setObject(isset($objects[$objectId]) ? $objects[$objectId] : false);
+            $this->_eqLogics[$eqLogic->getId()] = $eqLogic;
+        }
+        /* Les absents aussi : on ne les redemandera pas. */
+        foreach ($ids as $id) {
+            if (!isset($this->_eqLogics[$id])) {
+                $this->_eqLogics[$id] = null;
+            }
+        }
+    }
+
+    private function eqLogic($_id) {
+        if (!is_numeric($_id)) {
+            return null;
+        }
+        $this->loadEqLogics(array($_id));
+        return $this->_eqLogics[(int) $_id];
+    }
+
+    /* Charge en une requête les commandes pas encore lues, et leurs
+     * équipements en une seconde. */
+    private function loadCmds($_ids) {
+        $ids = array_diff_key(self::idList($_ids), $this->_cmds);
+        if (empty($ids)) {
+            return;
+        }
+        $cmds = cmd::byIds(array_values($ids));
+        $cmds = is_array($cmds) ? $cmds : array();
+        $eqLogicIds = array();
+        foreach ($cmds as $cmd) {
+            $eqLogicIds[] = $cmd->getEqLogic_id();
+        }
+        $this->loadEqLogics($eqLogicIds);
+        foreach ($cmds as $cmd) {
+            $cmd->setEqLogic($this->eqLogic($cmd->getEqLogic_id()));
+            $this->_cmds[$cmd->getId()] = $cmd;
+        }
+        foreach ($ids as $id) {
+            if (!isset($this->_cmds[$id])) {
+                $this->_cmds[$id] = null;
+            }
+        }
+    }
+
+    private function cmd($_id) {
+        if (!is_numeric($_id)) {
+            return null;
+        }
+        $this->loadCmds(array($_id));
+        return $this->_cmds[(int) $_id];
+    }
+
+    /* Les scénarios, lus une fois : collectScenarios() les parcourt tous, et
+     * les blocs A / DANS n'ont plus qu'à y piocher. */
+    private function scenario($_id) {
+        if ($this->_scenarios === null) {
+            $this->_scenarios = array();
+            foreach (scenario::all() as $scenario) {
+                $this->_scenarios[$scenario->getId()] = $scenario;
+            }
+        }
+        return (is_numeric($_id) && isset($this->_scenarios[(int) $_id])) ? $this->_scenarios[(int) $_id] : null;
+    }
+
     /* ======================================================== SCÉNARIOS */
 
     private function collectScenarios() {
-        foreach (scenario::all() as $scenario) {
+        $this->scenario(0);
+        foreach ($this->_scenarios as $scenario) {
             if ($scenario->getIsActive() != 1 || !in_array($scenario->getMode(), array('schedule', 'all'))) {
                 continue;
             }
@@ -348,7 +499,28 @@ class calendrierbeCollecte {
     /* ======================================================= TABLE CRON */
 
     private function collectCrons() {
-        foreach (cron::all() as $cron) {
+        $crons = cron::all();
+        /* Les commandes et équipements que désignent les options des tâches
+         * (retours d'état, tâches de plugins), lus en deux requêtes. */
+        $cmdIds = array();
+        $eqLogicIds = array();
+        foreach ($crons as $cron) {
+            $option = $cron->getOption();
+            if ($cron->getEnable() != 1 || !is_array($option)) {
+                continue;
+            }
+            if (isset($option['cmd_id'])) {
+                $cmdIds[] = $option['cmd_id'];
+            }
+            foreach (array('eqLogic_id', 'id') as $field) {
+                if (isset($option[$field])) {
+                    $eqLogicIds[] = $option[$field];
+                }
+            }
+        }
+        $this->loadCmds($cmdIds);
+        $this->loadEqLogics($eqLogicIds);
+        foreach ($crons as $cron) {
             /* Un démon tourne en permanence : il n'a pas d'heure de départ. */
             if ($cron->getDeamon() == 1 || $cron->getEnable() != 1) {
                 continue;
@@ -445,7 +617,7 @@ class calendrierbeCollecte {
         switch ($_key) {
             case 'scenario::doIn':
                 $item['category'] = 'bloc';
-                $scenario = isset($_option['scenario_id']) ? scenario::byId($_option['scenario_id']) : null;
+                $scenario = isset($_option['scenario_id']) ? $this->scenario($_option['scenario_id']) : null;
                 if (is_object($scenario)) {
                     $item['title'] = $scenario->getName();
                     $item['detail'] = sprintf(__('Bloc A / DANS du scénario %s', __FILE__), $scenario->getHumanName());
@@ -467,7 +639,7 @@ class calendrierbeCollecte {
             case 'cmd::cmdAlert':
             case 'cmd::duringAlertLevel':
                 $item['category'] = 'commande';
-                $cmd = isset($_option['cmd_id']) ? cmd::byId($_option['cmd_id']) : null;
+                $cmd = isset($_option['cmd_id']) ? $this->cmd($_option['cmd_id']) : null;
                 $name = is_object($cmd) ? $cmd->getHumanName() : ('#' . (isset($_option['cmd_id']) ? $_option['cmd_id'] : '?'));
                 if ($_key == 'cmd::returnState') {
                     $item['title'] = sprintf(__('Retour d\'état de %s', __FILE__), $name);
@@ -526,7 +698,7 @@ class calendrierbeCollecte {
          * le désigne, ce que font la plupart (« id » ou « eqLogic_id »). */
         foreach (array('eqLogic_id', 'id') as $field) {
             if (isset($_option[$field]) && is_numeric($_option[$field])) {
-                $eqLogic = eqLogic::byId($_option[$field]);
+                $eqLogic = $this->eqLogic($_option[$field]);
                 if (is_object($eqLogic) && $eqLogic->getEqType_name() == $class) {
                     $item['detail'] = $eqLogic->getHumanName();
                     $item['link'] = $eqLogic->getLinkToConfiguration();
@@ -563,7 +735,7 @@ class calendrierbeCollecte {
             if (!method_exists($id, $_function)) {
                 continue;
             }
-            if (config::byKey('functionality::' . $_function . '::enable', $id, 1) == 0) {
+            if (!$this->functionEnabled($id, $_function)) {
                 continue;
             }
             $names[] = $plugin->getName();
@@ -596,15 +768,16 @@ class calendrierbeCollecte {
             return;
         }
         $plugins = $this->plugins();
+        $this->loadEqLogics(array_column($rows, 'id'));
         foreach ($rows as $row) {
-            $eqLogic = eqLogic::byId($row['id']);
+            $eqLogic = $this->eqLogic($row['id']);
             if (!is_object($eqLogic)) {
                 continue;
             }
             $schedule = trim((string) $eqLogic->getConfiguration('autorefresh', ''));
             $type = $eqLogic->getEqType_name();
             if ($schedule === '' || !isset($plugins[$type]) || !method_exists($type, 'cron')
-                || config::byKey('functionality::cron::enable', $type, 1) == 0) {
+                || !$this->functionEnabled($type, 'cron')) {
                 continue;
             }
             $list = calendrierbeCron::between($schedule, $this->_from, $this->_to);
@@ -688,8 +861,9 @@ class calendrierbeCollecte {
         }
         $plugins = $this->plugins();
         $today = date('Y-m-d', $this->_from);
+        $this->loadCmds(array_column($rows, 'id'));
         foreach ($rows as $row) {
-            $cmd = cmd::byId($row['id']);
+            $cmd = $this->cmd($row['id']);
             if (!is_object($cmd) || !is_object($cmd->getEqLogic())) {
                 continue;
             }

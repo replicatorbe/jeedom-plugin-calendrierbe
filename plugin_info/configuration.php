@@ -35,6 +35,16 @@ if (!isConnect('admin')) {
 			<div class="col-md-5 help-block">{{Une tâche qui part plus souvent dans la journée est montrée en une seule ligne (« 288 fois, toutes les 5 min ») au lieu d'une ligne par exécution.}}</div>
 		</div>
 		<div class="form-group">
+			<label class="col-md-4 control-label">{{Signaler un pic de charge à partir de}}</label>
+			<div class="col-md-3">
+				<div class="input-group">
+					<input class="configKey form-control" data-l1key="peakThreshold" type="number" min="0" max="100" placeholder="5">
+					<span class="input-group-addon">{{tâches à la même minute}}</span>
+				</div>
+			</div>
+			<div class="col-md-5 help-block">{{Repère les minutes où beaucoup de tâches partent ensemble (souvent minuit), pour en décaler quelques-unes. 0 désactive le repère. Les tâches qui partent plus de 48 fois par jour n'entrent pas dans le compte.}}</div>
+		</div>
+		<div class="form-group">
 			<label class="col-md-4 control-label">{{Échéances annoncées par les plugins}}</label>
 			<div class="col-md-3">
 				<input type="checkbox" class="configKey" data-l1key="showNextCommands">

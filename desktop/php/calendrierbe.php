@@ -4,6 +4,7 @@ if (!isConnect('admin')) {
 }
 $plugin = plugin::byId('calendrierbe');
 sendVarToJS('eqType', $plugin->getId());
+sendVarToJS('calendrierbePeakThreshold', (int) config::byKey('peakThreshold', 'calendrierbe', 5));
 
 /*
  * Les catégories, avec leur nom, leur icône et leur réglage d'affichage par

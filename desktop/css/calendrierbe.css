@@ -148,6 +148,28 @@
   padding: 0 6px;
   background: var(--calbe-soft);
 }
+.calbe-head-badges { display: inline-flex; gap: 4px; align-items: center; }
+/* Pic de charge : la couleur d'avertissement de Jeedom, lisible sur les deux
+   thèmes parce qu'elle ne sert qu'en bordure et en texte. */
+.calbe-peak {
+  font-size: 0.75em;
+  font-weight: 600;
+  border-radius: 8px;
+  padding: 0 6px;
+  color: #d9534f;
+  border: 1px solid #d9534f;
+}
+.calbe-peak-text { color: #d9534f; }
+.calbe-peak-row {
+  font-size: 0.88em;
+  padding: 4px 6px;
+  margin-bottom: 3px;
+  border-left: 3px solid #d9534f;
+  border-radius: 2px;
+  background: rgba(217, 83, 79, 0.08);
+  word-break: break-word;
+}
+.calbe-peak-row i { color: #d9534f; }
 .calbe-line {
   font-size: 0.82em;
   white-space: nowrap;

@@ -42,6 +42,25 @@ plugin) est résumée en une ligne par jour : « ×288 · toutes les 5 min », a
 première et la dernière heure, et la liste complète dépliable quand elle reste
 lisible.
 
+## Les pics de charge
+
+Jeedom lance en même temps toutes les tâches prévues à la même minute, et
+certaines minutes en accumulent : minuit surtout (fonctions `cronDaily` des
+plugins, scénarios quotidiens, tâches horaires). Dès que 5 lignes affichées
+partent ensemble (réglable dans la configuration du plugin, 0 pour ne rien
+signaler), le calendrier le montre :
+
+- une pastille rouge <i class="fas fa-layer-group"></i> dans la case du jour,
+  avec le plus gros pic, et tous les pics du jour dans l'infobulle ;
+- une ligne « Pic de charge » dans le détail de la journée, à la minute
+  concernée, avec la liste des tâches qui partent ensemble.
+
+Décaler l'une d'elles de quelques minutes suffit à étaler la charge. Le compte
+suit les filtres et la recherche. Une tâche qui part plus de 48 fois par jour
+n'y entre pas : elle tomberait sur chaque pic sans rien apprendre. Une ligne
+« Fonction … des plugins » compte pour une, quel que soit le nombre de plugins
+qu'elle appelle.
+
 ## Les marques
 
 - **estimation** : le scénario est programmé par une expression (par exemple
