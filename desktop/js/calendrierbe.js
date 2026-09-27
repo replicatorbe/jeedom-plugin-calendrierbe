@@ -310,6 +310,68 @@ function calendrierbeByDay() {
   return byDay
 }
 
+/* ======================================================= PICS DE CHARGE */
+
+/*
+ * Les minutes où partent ensemble au moins calendrierbePeakThreshold lignes
+ * affichées : jeeCron les lance en même temps, et minuit en accumule souvent
+ * (fonctions cronDaily des plugins, maintenance, scénarios quotidiens). Une
+ * tâche résumée compte à chacune des heures de sa liste ; celle qui part plus
+ * de 48 fois par jour n'a pas de liste, et n'est pas comptée : elle tombe sur
+ * chaque pic, sans rien apprendre de plus. Une tâche en retard ou échouée est
+ * montrée à l'heure qu'il est, pas à celle où elle partira : elle n'y compte
+ * pas non plus.
+ */
+function calendrierbePeaks(_items) {
+  var threshold = parseInt(calendrierbePeakThreshold, 10) || 0
+  if (threshold < 2) {
+    return []
+  }
+  var byMinute = {}
+  _items.forEach(function (item) {
+    if (item.allDay || item.late || item.failed) {
+      return
+    }
+    var times = (item.count > 1) ? (item.times || []) : [item.time]
+    times.forEach(function (time) {
+      if (!byMinute[time]) {
+        byMinute[time] = []
+      }
+      byMinute[time].push(item)
+    })
+  })
+  return Object.keys(byMinute).sort().filter(function (time) {
+    return byMinute[time].length >= threshold
+  }).map(function (time) {
+    return { time: time, items: byMinute[time] }
+  })
+}
+
+/* La pastille d'une case du mois ou d'une colonne de la semaine : le plus
+   gros pic du jour, et tous les pics dans l'infobulle. */
+function calendrierbePeakBadge(_items) {
+  var peaks = calendrierbePeaks(_items)
+  if (peaks.length == 0) {
+    return ''
+  }
+  var max = 0
+  var list = peaks.map(function (peak) {
+    max = Math.max(max, peak.items.length)
+    return peak.items.length + ' {{à}} ' + peak.time
+  })
+  return '<span class="calbe-peak" title="' + calendrierbeEscape('{{Pic de charge : tâches qui partent à la même minute}} — ' + list.join(', ')) + '">' +
+    '<i class="fas fa-layer-group"></i> ' + max + '</span>'
+}
+
+function calendrierbePeakRowHtml(_peak) {
+  var titles = _peak.items.map(function (item) {
+    return calendrierbeEscape(item.title)
+  })
+  return '<div class="calbe-peak-row" title="{{Décaler l\'une de ces programmations de quelques minutes étale la charge.}}">' +
+    '<i class="fas fa-layer-group"></i> <strong>{{Pic de charge}} · ' + _peak.time + '</strong> — ' +
+    _peak.items.length + ' {{tâches partent à la même minute}} : ' + titles.join(', ') + '</div>'
+}
+
 /* ========================================================== L'AFFICHAGE */
 
 function calendrierbeRender() {
@@ -448,11 +510,11 @@ function calendrierbeMonthHtml(_byDay) {
     classes += (key == calendrierbeState.selected) ? ' calbe-selected' : ''
     html += '<div class="' + classes + '" data-day="' + key + '"' +
       calendrierbeButtonAttrs(calendrierbeFormat(day, { weekday: 'long', day: 'numeric', month: 'long' }) + ' — ' + items.length + ' {{ligne(s)}}') + '>' +
-      '<div class="calbe-cell-head"><span class="calbe-daynum">' + day.getDate() + '</span>'
+      '<div class="calbe-cell-head"><span class="calbe-daynum">' + day.getDate() + '</span><span class="calbe-head-badges">'
     if (items.length > 0) {
       html += '<span class="calbe-badge" title="{{Lignes affichées ce jour-là}}">' + items.length + '</span>'
     }
-    html += '</div>'
+    html += calendrierbePeakBadge(items) + '</span></div>'
     calendrierbeCompactOrder(items).slice(0, calendrierbeCellLines).forEach(function (item) {
       html += calendrierbeLineHtml(item)
     })
@@ -478,8 +540,9 @@ function calendrierbeWeekHtml(_byDay) {
     classes += (key == calendrierbeState.selected) ? ' calbe-selected' : ''
     var label = calendrierbeFormat(day, { weekday: 'short', day: 'numeric', month: 'short' })
     html += '<div class="' + classes + '" data-day="' + key + '"' + calendrierbeButtonAttrs(label) + '>' +
-      '<div class="calbe-weekday-head">' + calendrierbeEscape(label) +
-      (items.length ? ' <span class="calbe-badge" title="{{Lignes affichées ce jour-là}}">' + items.length + '</span>' : '') + '</div>'
+      '<div class="calbe-weekday-head">' + calendrierbeEscape(label) + '<span class="calbe-head-badges">' +
+      (items.length ? '<span class="calbe-badge" title="{{Lignes affichées ce jour-là}}">' + items.length + '</span>' : '') +
+      calendrierbePeakBadge(items) + '</span></div>'
     calendrierbeCompactOrder(items).forEach(function (item) {
       html += calendrierbeLineHtml(item)
     })
@@ -516,20 +579,36 @@ function calendrierbeDayHtml(_key, _items, _large) {
     return html + '<div class="calbe-empty">{{Rien de programmé ce jour-là pour les catégories affichées.}}</div></div>'
   }
   var total = calendrierbeTotal(_items)
+  var peaks = calendrierbePeaks(_items)
   html += '<div class="calbe-day-summary">' + _items.length + ' {{ligne(s)}}' +
-    (total > _items.length ? ', ' + total + ' {{exécutions en tout}}' : '') + '</div>'
+    (total > _items.length ? ', ' + total + ' {{exécutions en tout}}' : '') +
+    (peaks.length ? ', <span class="calbe-peak-text">' + peaks.length + ' {{pic(s) de charge}}</span>' : '') + '</div>'
   var ordered = _items.slice().sort(function (a, b) {
     return ((b.allDay ? 1 : 0) - (a.allDay ? 1 : 0)) || (a.ts - b.ts)
   })
+  /* Chaque pic prend place dans le fil de la journée, juste avant la première
+     ligne de sa minute, sous l'en-tête de son heure. */
   var hour = null
-  ordered.forEach(function (item) {
-    var itemHour = item.allDay ? '{{Dans la journée}}' : item.time.substr(0, 2) + ' h'
-    if (itemHour !== hour) {
-      hour = itemHour
+  var heading = function (_hour) {
+    if (_hour !== hour) {
+      hour = _hour
       html += '<div class="calbe-hour">' + hour + '</div>'
     }
+  }
+  var flushPeaks = function (_until) {
+    while (peaks.length && (_until === null || peaks[0].time <= _until)) {
+      heading(peaks[0].time.substr(0, 2) + ' h')
+      html += calendrierbePeakRowHtml(peaks.shift())
+    }
+  }
+  ordered.forEach(function (item) {
+    if (!item.allDay) {
+      flushPeaks(item.time)
+    }
+    heading(item.allDay ? '{{Dans la journée}}' : item.time.substr(0, 2) + ' h')
     html += calendrierbeEntryHtml(item)
   })
+  flushPeaks(null)
   return html + '</div>'
 }
 
