@@ -8,6 +8,10 @@ and computes it exactly as the core does.
 Open it from **Home → Schedule calendar**. Month, week and day views; click a
 day to see every trigger, hour by hour, with a link to the scenario or device.
 
+![The month view](../images/vue-mois.png)
+
+![The detail of a day](../images/detail-jour.png)
+
 Load peaks: when 5 or more displayed lines start at the same minute (setting
 in the plugin configuration, 0 to disable), the day shows a red badge and the
 day detail lists the tasks starting together, so one of them can be moved a

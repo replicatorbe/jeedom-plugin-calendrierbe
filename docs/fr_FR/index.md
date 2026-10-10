@@ -16,9 +16,13 @@ se retire en décochant « Afficher le panneau desktop » dans la gestion du plu
 - **Semaine** : chaque journée en colonne, avec tous ses déclenchements.
 - **Jour** : le détail heure par heure.
 
+![La vue du mois](../images/vue-mois.png)
+
 Chaque ligne du détail donne l'heure, la catégorie, le nom (cliquable vers le
 scénario ou l'équipement) et le détail : la programmation, l'équipement, la
 valeur que reprendra une commande…
+
+![Le détail d'une journée](../images/detail-jour.png)
 
 ## Les catégories
 

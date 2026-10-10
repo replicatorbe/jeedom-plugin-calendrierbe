@@ -2,6 +2,8 @@
 
 Un calendrier de tout ce que Jeedom va exécuter, jour par jour.
 
+![La vue du mois](docs/images/vue-mois.png)
+
 ## Ce qu'il apporte
 
 - **Scénarios programmés** (mode « Programmé » ou « Les deux »), avec toutes
